@@ -9,8 +9,9 @@ echo Running security tests...
 for f in tests/*/*.{png,jpg}
 do
     let NTESTED=1+$NTESTED
-    valgrind -q --leak-check=no --error-exitcode=42 \
-        ./analyze tests/$f > $TMPOUT 2> $TMPERR
+    valgrind -q --error-exitcode=42 \
+        --leak-check=no --track-origins=yes --suppressions=./libz.supp \
+        ./analyze $f > $TMPOUT 2> $TMPERR
     RV=$?
     if [ $RV -eq 42 ]
     then

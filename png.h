@@ -3,5 +3,4 @@
 
 int analyze_png(FILE *f);
 
-
 #endif
