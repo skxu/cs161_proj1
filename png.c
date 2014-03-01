@@ -109,6 +109,13 @@ int analyze_png(FILE *f) {
 			printf("%s", "tIME chunktype\n");
 			
 			//filler method for now, NEED TO CHANGE
+			/*tentative strategy:
+			1) Make sure "length" is at least 7 bytes (reject malformed)
+			2) Grab the fields in order (year, month, day, hour, minute, second)
+				Note: year is 2 bytes, everything else is 1 byte
+			3) Construct the null-terminated timestamp string
+			4) E.g. Timestamp: 12/25/2004 2:39:2
+			*/	
 			unsigned char junk[length];
 			for (i=0; i<length; i++) {
 				fread(&junk,1,1,f);
