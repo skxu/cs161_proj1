@@ -23,7 +23,8 @@ int analyze_png(FILE *f) {
 	const unsigned char time_format[4] = {0x74, 0x49, 0x4D, 0x45};
 	const unsigned char end_format[4] = {0x49, 0x45, 0x4e, 0x44};
 
-	for (i=0; i<8; i++) {
+	const size_t SIZE_PNG_FORMAT = sizeof(png_format);
+
 		/*
 		size_t fread ( void * ptr, size_t size, size_t count, FILE * stream );
 		Reads an array of count elements, each one with a size of size bytes, 
@@ -34,8 +35,19 @@ int analyze_png(FILE *f) {
 
 		The total amount of bytes read if successful is (size*count).
 		*/
-		fread(&png_check[i],1,1,f);
+
+
+	//read the first 8 bytes and check for read error
+	if (fread(png_check, 1, SIZE_PNG_FORMAT, f) != SIZE_PNG_FORMAT) {
+		return -1;
 	}
+
+	if (memcmp(png_check, png_format, SIZE_PNG_FORMAT)) {
+		//Not a valid PNG file
+		return -1;
+	}
+//***** combine these checks?
+	
 
 	for (i=0; i<8; i++) {
 		printf("%x\n", png_check[i]);
@@ -52,16 +64,25 @@ int analyze_png(FILE *f) {
 		unsigned int length = 0;
 		unsigned char chunktype[4];
 		unsigned char checksum[4];
-		fread(&length, 4, 1, f); //read the chunk length (big endian int)
+
+		if (fread(&length, 4, 1, f) != 1) { //read the chunk length (big endian int)
+			return -1;
+		}
+
+//***** temporarily force little endiannness
+		length = length >> 24;
 
 		printf("%s", "\nThe chunktype is: ");
 		for (i=0; i<4; i++) { 	//read the chunktype (ASCII)
-			fread(&chunktype[i],1,1,f);
+			if (fread(&chunktype[i],1,1,f) != 1) {
+				return -1;
+			}
 			printf("%c", chunktype[i]);
 		}
 
 		printf("\nThe length of this chunk's data is: %d\n", length);
 
+//***** switch statement here imo for chunktypes
 		if (checkChunk(chunktype, text_format) == true) { // DO tEXt stuff here
 			printf("%s", "tEXt chunktype\n");
 			
@@ -74,7 +95,9 @@ int analyze_png(FILE *f) {
 			unsigned char key[length];
 			
 			while (stop == false) {
-				fread(&key[counter],1,1,f);
+				if (counter == length || fread(&key[counter],1,1,f) != 1) {
+					return -1;
+				}
 				if (key[counter] == 0x00) {
 					stop = true;
 					printf("%s", ": "); //debug statement representing the colon in Key: Value
@@ -83,15 +106,15 @@ int analyze_png(FILE *f) {
 				}
 				counter++;
 			}
-			unsigned int num_left = length - (counter);
+//***** below could be stored in back of "key" array if i starts at counter and goes to length
+			unsigned int num_left = length - counter;
 			unsigned char value[num_left];
 			for (i=0; i<num_left; i++) {
-				fread(&value[i],1,1,f);
+				if (fread(&value[i],1,1,f) != 1) {
+					return -1;
+				}
 				printf("%c", value[i]); //this is the "value" in Key: Value
 			}
-			
-
-
 			
 
 
@@ -124,6 +147,8 @@ int analyze_png(FILE *f) {
 		} else if (checkChunk(chunktype, end_format) == true) { //ENDING stuff here
 			printf("%s", "IEND chunktype\n");
 			done = true;
+			return 0;
+
 		} else { //this chunk is irrelevant, pass it and get to the next chunk
 			printf("%s", "irrelevant chunktype\n");
 
@@ -132,7 +157,9 @@ int analyze_png(FILE *f) {
 			//pretty sure there's a way to exploit this
 			unsigned char junk[length];
 			for (i=0; i<length; i++) {
-				fread(&junk,1,1,f);
+				if (fread(junk,1,1,f) != 1) {
+					return -1;
+				}
 			}
 
 		}
