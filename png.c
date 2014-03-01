@@ -77,9 +77,9 @@ int analyze_png(FILE *f) {
 				fread(&key[counter],1,1,f);
 				if (key[counter] == 0x00) {
 					stop = true;
-					printf("%s", ": ");
+					printf("%s", ": "); //debug statement representing the colon in Key: Value
 				} else { //this else statement is temporary, for debugging
-					printf("%c", key[counter]);
+					printf("%c", key[counter]); //this is the "key" in Key: Value
 				}
 				counter++;
 			}
@@ -87,7 +87,7 @@ int analyze_png(FILE *f) {
 			unsigned char value[num_left];
 			for (i=0; i<num_left; i++) {
 				fread(&value[i],1,1,f);
-				printf("%c", value[i]);
+				printf("%c", value[i]); //this is the "value" in Key: Value
 			}
 			
 
