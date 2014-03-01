@@ -10,9 +10,9 @@
  * If it isn't a PNG file, return -1 and print nothing.
  */
 int analyze_png(FILE *f) {
-	
 
-    /* YOU WRITE THIS PART */
+
+	
 	//Check if first 8 bytes match standard png type
 	unsigned int i = 0;
 	bool done = false;
@@ -54,7 +54,7 @@ int analyze_png(FILE *f) {
 		unsigned char checksum[4];
 		fread(&length, 4, 1, f); //read the chunk length (big endian int)
 
-		printf("%s", "The chunktype is: ");
+		printf("%s", "\nThe chunktype is: ");
 		for (i=0; i<4; i++) { 	//read the chunktype (ASCII)
 			fread(&chunktype[i],1,1,f);
 			printf("%c", chunktype[i]);
@@ -66,10 +66,34 @@ int analyze_png(FILE *f) {
 			printf("%s", "tEXt chunktype\n");
 			
 			//filler method for now, NEED TO CHANGE
-			unsigned char junk[length];
-			for (i=0; i<length; i++) {
-				fread(&junk,1,1,f);
+			//tentative strategy: read byte by byte until 0x00
+			//then read the rest based on length
+			
+			bool stop = false;
+			unsigned int counter = 0;
+			unsigned char key[length];
+			
+			while (stop == false) {
+				fread(&key[counter],1,1,f);
+				if (key[counter] == 0x00) {
+					stop = true;
+					printf("%s", ": ");
+				} else { //this else statement is temporary, for debugging
+					printf("%c", key[counter]);
+				}
+				counter++;
 			}
+			unsigned int num_left = length - (counter);
+			unsigned char value[num_left];
+			for (i=0; i<num_left; i++) {
+				fread(&value[i],1,1,f);
+				printf("%c", value[i]);
+			}
+			
+
+
+			
+
 
 		} else if (checkChunk(chunktype, ztxt_format) == true) { //DO zTXt stuff here
 			printf("%s", "zTXt chunktype\n");
