@@ -50,7 +50,7 @@ int analyze_png(FILE *f) {
 	
 
 	for (i=0; i<8; i++) {
-		printf("%x\n", png_check[i]);
+		//printf("%x\n", png_check[i]);
 		//printf("%d\n", png_check[i] == png_format[i]);
 		if (png_check[i] != png_format[i]) {
 			//Not a valid PNG file
@@ -61,16 +61,17 @@ int analyze_png(FILE *f) {
 	//moving on to chunks
 	//The following code below should be in a loop, check chunks 1-by-1 until done
 	while (done == false) {
+		unsigned char len[4];
 		unsigned int length = 0;
 		unsigned char chunktype[4];
 		unsigned char checksum[4];
 
-		if (fread(&length, 4, 1, f) != 1) { //read the chunk length (big endian int)
+		if (fread(len, 4, 1, f) != 1) { //read the chunk length (big endian int)
 			return -1;
 		}
 
 //***** temporarily force big endiannness
-		length = length >> 24;
+		length += len[0] | len[1] << 8 | len[2] << 16 | len[3] << 24;
 
 		printf("%s", "\nThe chunktype is: ");
 		for (i=0; i<4; i++) { 	//read the chunktype (ASCII)
@@ -159,17 +160,18 @@ int analyze_png(FILE *f) {
 				Note: year is 2 bytes, everything else is 1 byte
 			3) Construct the timestamp string
 			4) E.g. Timestamp: 12/25/2004 2:39:2
-			*/	
+			*/
+			unsigned char yr[2];
 			unsigned int year, month, day, hour, minute, second;
 			
 			if (length != 7) {
-				printf("%s", "what2");
+				return -1;
 			}
 			
-			if ((fread(&year,2,1,f) != 1) || (fread(&month,1,1,f) != 1) || (fread(&day,1,1,f) != 1) || (fread(&hour,1,1,f) != 1) || (fread(&minute,1,1,f) != 1) || (fread(&second,1,1,f) != 1)) {
-				printf("%s", "what");
+			if ((fread(yr,2,1,f) != 1) || (fread(&month,1,1,f) != 1) || (fread(&day,1,1,f) != 1) || (fread(&hour,1,1,f) != 1) || (fread(&minute,1,1,f) != 1) || (fread(&second,1,1,f) != 1)) {
+				return -1;
 			}
-			year = year >> 16;
+			year += yr[0] << 16 | yr[1] << 24;
 			month = month >> 24;
 			day = day >> 24;
 			hour = hour >> 24;
