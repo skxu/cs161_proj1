@@ -69,7 +69,7 @@ int analyze_png(FILE *f) {
 			return -1;
 		}
 
-//***** temporarily force little endiannness
+//***** temporarily force big endiannness
 		length = length >> 24;
 
 		printf("%s", "\nThe chunktype is: ");
@@ -121,7 +121,29 @@ int analyze_png(FILE *f) {
 		} else if (checkChunk(chunktype, ztxt_format) == true) { //DO zTXt stuff here
 			printf("%s", "zTXt chunktype\n");
 			
-			//filler method for now, NEED TO CHANGE
+			bool stop = false;
+			unsigned int counter = 0;
+			unsigned char key[length];
+
+			//read key
+			while (stop == false) {
+				if (counter == length || fread(&key[counter],1,1,f) != 1) {
+					return -1;
+				}
+				if (key[counter] == 0x00) {
+					stop = true;
+					printf("%s", ": ");
+				} else {
+					printf("%c", key[counter]);
+				}
+				counter++;
+			}
+			unsigned char ctype[1];
+			//read compressiontype
+			if (fread(&ctype[0],1,1,f) != 1 || ctype[0] != 0x00) {
+				return -1;
+			}
+
 			unsigned char junk[length];
 			for (i=0; i<length; i++) {
 				fread(&junk,1,1,f);
@@ -131,19 +153,30 @@ int analyze_png(FILE *f) {
 			//there should only be ONE tIME chunk in a valid PNG file
 			printf("%s", "tIME chunktype\n");
 			
-			//filler method for now, NEED TO CHANGE
 			/*tentative strategy:
 			1) Make sure "length" is at least 7 bytes (reject malformed)
 			2) Grab the fields in order (year, month, day, hour, minute, second)
 				Note: year is 2 bytes, everything else is 1 byte
-			3) Construct the null-terminated timestamp string
+			3) Construct the timestamp string
 			4) E.g. Timestamp: 12/25/2004 2:39:2
 			*/	
-			unsigned char junk[length];
-			for (i=0; i<length; i++) {
-				fread(&junk,1,1,f);
+			unsigned int year, month, day, hour, minute, second;
+			
+			if (length != 7) {
+				printf("%s", "what2");
 			}
-
+			
+			if ((fread(&year,2,1,f) != 1) || (fread(&month,1,1,f) != 1) || (fread(&day,1,1,f) != 1) || (fread(&hour,1,1,f) != 1) || (fread(&minute,1,1,f) != 1) || (fread(&second,1,1,f) != 1)) {
+				printf("%s", "what");
+			}
+			year = year >> 16;
+			month = month >> 24;
+			day = day >> 24;
+			hour = hour >> 24;
+			minute = minute >> 24;
+			second = second >> 24;
+			printf("%u/%u/%u %u:%u:%u", month,day,year,hour,minute,second);
+			
 		} else if (checkChunk(chunktype, end_format) == true) { //ENDING stuff here
 			printf("%s", "IEND chunktype\n");
 			done = true;
@@ -152,12 +185,10 @@ int analyze_png(FILE *f) {
 		} else { //this chunk is irrelevant, pass it and get to the next chunk
 			printf("%s", "irrelevant chunktype\n");
 
-			//NOT SURE IF THIS IS DANGEROUS OR NOT HELP ME
-			//lack of sleep atm
 			//pretty sure there's a way to exploit this
-			unsigned char junk[length];
+			unsigned char junk;
 			for (i=0; i<length; i++) {
-				if (fread(junk,1,1,f) != 1) {
+				if (fread(&junk,1,1,f) != 1) {
 					return -1;
 				}
 			}
@@ -177,10 +208,10 @@ int analyze_png(FILE *f) {
 
 bool checkChunk(unsigned char *test_chunk, const unsigned char *format) {
 	int i = 0;
-		for (i = 0; i<4; i++) {
-			if (test_chunk[i] != format[i]) {
-				return false;
-			}
+	for (i = 0; i<4; i++) {
+		if (test_chunk[i] != format[i]) {
+			return false;
 		}
-		return true;
 	}
+	return true;
+}
