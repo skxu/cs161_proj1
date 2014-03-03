@@ -10,9 +10,6 @@
  * If it isn't a PNG file, return -1 and print nothing.
  */
 int analyze_png(FILE *f) {
-
-
-	
 	//Check if first 8 bytes match standard png type
 	unsigned int i = 0;
 	bool done = false;
@@ -22,36 +19,17 @@ int analyze_png(FILE *f) {
 	const unsigned char ztxt_format[4] = {0x7A, 0x54, 0x58, 0x74};
 	const unsigned char time_format[4] = {0x74, 0x49, 0x4D, 0x45};
 	const unsigned char end_format[4] = {0x49, 0x45, 0x4e, 0x44};
-
 	const size_t SIZE_PNG_FORMAT = sizeof(png_format);
-
-		/*
-		size_t fread ( void * ptr, size_t size, size_t count, FILE * stream );
-		Reads an array of count elements, each one with a size of size bytes, 
-		from the stream and stores them in the block of memory specified by ptr.
-
-		The position indicator of the stream is advanced by the total amount of 
-		bytes read.
-
-		The total amount of bytes read if successful is (size*count).
-		*/
-
 
 	//read the first 8 bytes and check for read error
 	if (fread(png_check, 1, SIZE_PNG_FORMAT, f) != SIZE_PNG_FORMAT) {
 		return -1;
 	}
-
 	if (memcmp(png_check, png_format, SIZE_PNG_FORMAT)) {
 		//Not a valid PNG file
 		return -1;
 	}
-//***** combine these checks?
-	
-
 	for (i=0; i<8; i++) {
-		//printf("%x\n", png_check[i]);
-		//printf("%d\n", png_check[i] == png_format[i]);
 		if (png_check[i] != png_format[i]) {
 			//Not a valid PNG file
 			return -1;
@@ -68,7 +46,6 @@ int analyze_png(FILE *f) {
 		if (fread(&length, 4, 1, f) != 1) { //read the chunk length (big endian int)
 				return -1;
 		}
-//***** temporarily force big endiannness
 		unsigned char *int_to_char = (unsigned char *) &length;
 		len[3] = int_to_char[0];
 		len[2] = int_to_char[1];
@@ -77,23 +54,18 @@ int analyze_png(FILE *f) {
 
 		length = (unsigned int) *len;
 		//printf("\nThe length of this chunk's data is now: %d\n", length);
-
 		//printf("%s", "\nThe chunktype is: ");
 		for (i=0; i<4; i++) { 	//read the chunktype (ASCII)
 			if (fread(&chunktype[i],1,1,f) != 1) {
 				return -1;
 			}
-			//printf("%c", chunktype[i]);
 		}
 
-
-		if (checkChunk(chunktype, text_format) == true) { // DO tEXt stuff here
+		if (checkChunk(chunktype, text_format) == true) { //------DO tEXt stuff here--------
 			//printf("%s", "tEXt chunktype\n");
 			bool stop = false;
 			unsigned int counter = 0;
-			//unsigned char key[length];
 			unsigned char complete[length + 2];
-			
 			while (stop == false) {
 				if (counter == length || fread(&complete[counter],1,1,f) != 1) {
 					return -1;
@@ -111,9 +83,6 @@ int analyze_png(FILE *f) {
 				*/
 				counter++;
 			}
-		//***** below could be stored in back of "key" array if i starts at counter and goes to length
-			//unsigned int num_left = length - counter;
-			//unsigned char value[num_left];
 			for (i=counter; i<length + 1; i++) {
 				if (fread(&complete[i],1,1,f) != 1) {
 					return -1;
@@ -122,16 +91,11 @@ int analyze_png(FILE *f) {
 			}
 			complete[length + 1] = '\0';
 			printf("%s\n", complete);
-			
-
-
-		} else if (checkChunk(chunktype, ztxt_format) == true) { //DO zTXt stuff here
+		} else if (checkChunk(chunktype, ztxt_format) == true) { //-----DO zTXt stuff here--------
 			//printf("%s", "zTXt chunktype\n");
-			
 			bool stop = false;
 			unsigned int counter = 0;
 			unsigned char key[length];
-
 			//read key
 			while (stop == false) {
 				if (counter == length || fread(&key[counter],1,1,f) != 1) {
@@ -150,7 +114,7 @@ int analyze_png(FILE *f) {
 			if (fread(&ctype[0],1,1,f) != 1 || ctype[0] != 0x00) {
 				return -1;
 			}
-
+			//get compressed values
 			unsigned int num_left = length - counter - 1;
 			unsigned char compressedvalue[num_left];
 			for (i=0; i<num_left; i++) {
@@ -158,14 +122,13 @@ int analyze_png(FILE *f) {
 					return -1;
 				}
 			}
-
-			uLongf dst_len = num_left;
+			//malloc space for uncompressed
+			uLongf dst_len = num_left*2;
 			unsigned char* dst;
 			dst = (unsigned char *) malloc(dst_len * sizeof(unsigned char));
 			unsigned char* src;
 			src = compressedvalue;
 			uLong src_len = num_left;
-
 			if (dst == NULL) {
 				return -1;
 			}
@@ -174,17 +137,14 @@ int analyze_png(FILE *f) {
 			while (stop == false) {
 				size_t value = uncompress(dst, &dst_len, src, src_len);
 				if (value == Z_DATA_ERROR || value == Z_MEM_ERROR) {
-					//printf("%s", "wtf");
 					return -1;
 				} else if (value == Z_BUF_ERROR) {
-					//printf("%s", "wtf2");
 					dst_len *= 2;
 					dst = (unsigned char *) malloc(dst_len * sizeof(unsigned char));
 					if (dst == NULL) {
 						return -1;
 					}
 				} else if (value == Z_OK) {
-					//printf("%s", "what");
 					stop = true;
 				}
 			}
@@ -192,13 +152,8 @@ int analyze_png(FILE *f) {
 				printf("%c", dst[i]);
 			}
 			printf("%s", "\n");
-
-
-
 		} else if (checkChunk(chunktype, time_format) == true) { //DO tIME stuff here
 			//there should only be ONE tIME chunk in a valid PNG file
-			//printf("%s", "tIME chunktype\n");
-			
 			/*tentative strategy:
 			1) Make sure "length" is at least 7 bytes (reject malformed)
 			2) Grab the fields in order (year, month, day, hour, minute, second)
@@ -206,53 +161,43 @@ int analyze_png(FILE *f) {
 			3) Construct the timestamp string
 			4) E.g. Timestamp: 12/25/2004 2:39:2
 			*/
-			unsigned char data[8];
+			unsigned char data[7];
 			unsigned int year, month, day, hour, minute, second;
-			
+			//tIMe chunk should only be 7 bytes long
 			if (length != 7) {
 				return -1;
 			}
-			
-			if (fread(&data,8,1,f) != 1) {
+			//read tIMe data
+			if (fread(&data,7,1,f) != 1) {
 				return -1;
 			}
+			//fix endianness
 			year = data[0]*256 + data[1];
 			month = data[2];
 			day = data[3];
 			hour = data[4];
 			minute = data[5];
 			second = data[6];
-			
-			
-
 			printf("Timestamp: %u/%u/%u %u:%u:%u\n", month,day,year,hour,minute,second);
-			
 		} else if (checkChunk(chunktype, end_format) == true) { //ENDING stuff here
 			//printf("%s", "IEND chunktype\n");
 			done = true;
 			return 0;
-
 		} else { //this chunk is irrelevant, pass it and get to the next chunk
 			//printf("%s", "irrelevant chunktype\n");
-
 			//pretty sure there's a way to exploit this
-			unsigned char junk[length];
+			unsigned char junk[1];
 			for (i=0; i<length; i++) {
-				if (fread(junk,1,1,f) != 1) {
+				if (fread(&junk[0],1,1,f) != 1) {
 					return -1;
 				}
 			}
-
 		}
 
 		for (i=0; i<4; i++) { //read the checksum (CRC-32???)
 			fread(&checksum[i],1,1,f);
 		}
 	}
-
-
-	
-
     return 0;
 }
 
