@@ -82,11 +82,10 @@ int analyze_jpg(FILE *f) {
 			}
 
 			if (marker[1] == 0xe1) { //APP1 chunk
-				printf("SDFSDFDSFSDFSDFSDFS");
-				unsigned int data_size = length - 2;
-				if (data_size < 8) {
+				if (length < 18) {
 					return -1;
 				}
+				unsigned int data_size = length - 10;
 
 				unsigned char tiff_format[SIZE_TIFF_FORMAT];
 				if (fread(tiff_format, 1, SIZE_TIFF_FORMAT, f) != SIZE_TIFF_FORMAT) {
@@ -97,7 +96,7 @@ int analyze_jpg(FILE *f) {
 				}
 
 				unsigned char tiff_header[8];
-				if (fread(tiff_header, 1, 8, f) != 1) {
+				if (fread(tiff_header, 1, 8, f) != 8) {
 					return -1;
 				}
 
@@ -110,6 +109,9 @@ int analyze_jpg(FILE *f) {
 				if (tiff_header[2] != 0x2a || tiff_header[3] != 0x00) {
 					return -1;
 				}
+
+				long int header_end = ftell(f);
+				unsigned long header_offset = 8;
 
 				unsigned long offset = (unsigned long) (((unsigned int*) tiff_header)[1]);
 				if (offset < 8 || offset >= data_size) {
@@ -158,7 +160,8 @@ int analyze_jpg(FILE *f) {
 						return -1;
 					}
 					offset += 12;
-					if (offset > o_o_v) {
+
+					if (offset > data_size) {
 						return -1;
 					}
 
@@ -166,6 +169,9 @@ int analyze_jpg(FILE *f) {
 						exif_ptr = o_o_v;
 						exif_rdy = 1;
 					}
+
+					long int next_header_pos = ftell(f);
+					unsigned long old_offset = offset;
 
 					unsigned int data_byte_size = 0;
 					unsigned int print_string = 0; // set to true if should print a string
@@ -176,8 +182,8 @@ int analyze_jpg(FILE *f) {
 							break;
 						case 0x0002:
 							data_byte_size = 1;
+							print_string = 1;
 							switch (tagid) {
-								print_string = 1;
 								case 0x010d:
 									printf("DocumentName: ");
 									break;
@@ -266,12 +272,15 @@ int analyze_jpg(FILE *f) {
 
 					unsigned long data_num_bytes = (unsigned long) count * data_byte_size;
 
-					if (data_num_bytes < 4) { // data fits in o_o_v field
+					if (data_num_bytes < 5) { // data fits in o_o_v field
 						if (print_string) {
 							printf("%.*s\n", (unsigned int) data_num_bytes, (unsigned char*) &o_o_v);
 						}
 						continue;
 					}
+
+					fseek(f, header_end, SEEK_SET);
+					offset = header_offset;
 
 					while (offset < o_o_v) {  // move stream to beginning of list
 						if (fread(&data, 1, 1, f) != 1) {
@@ -303,16 +312,35 @@ int analyze_jpg(FILE *f) {
 						}
 					}
 
-					unsigned char stop_print = 0;
-					while (offset < end) {
+					if (print_string) {
+						while (offset < end) {
+							if (fread(&data, 1, 1, f) != 1) {
+								return -1;
+							}
+							if (data == 0x00) {
+								break;
+							}
+							printf("%c", data);
+							if (offset + 1 < offset) {
+								return -1;
+							}
+							offset++;
+						}
+						printf("\n");
+					}
+
+					fseek(f, next_header_pos, SEEK_SET);
+					offset = old_offset;
+				}
+
+				if (offset > data_size) {
+					return -1;
+				}
+
+				if (!exif_rdy) {
+					while (offset < data_size) {
 						if (fread(&data, 1, 1, f) != 1) {
 							return -1;
-						}
-						if (data == 0x00) {
-							stop_print = 1;
-						}
-						if (!stop_print && print_string) {
-							printf("%c", data);
 						}
 						if (offset + 1 < offset) {
 							return -1;
@@ -320,15 +348,14 @@ int analyze_jpg(FILE *f) {
 						offset++;
 					}
 
-					if (print_string) {
-						printf("\n");
+					if (fread(marker, 1, 2, f) != 2) { // get next chunk ready
+						return -1;
 					}
+
+					return 0;
 				}
 
 				// scan to exif IFD
-				if (!exif_rdy || offset > data_size) {
-					return -1;
-				}
 				while (offset < exif_ptr) {
 					if (fread(&data, 1, 1, f) != 1) {
 						return -1;
@@ -338,6 +365,13 @@ int analyze_jpg(FILE *f) {
 					}
 					offset++;
 				}
+
+				num_tag_structures = 0;
+				if (fread(&num_tag_structures, 2, 1, f) != 1) {
+					return -1;
+				}
+
+				offset += 2;
 
 				//tag structures, exif IFD
 				for (j = 0; j < num_tag_structures; j++) {
@@ -365,9 +399,13 @@ int analyze_jpg(FILE *f) {
 						return -1;
 					}
 					offset += 12;
-					if (offset > o_o_v) {
+
+					if (offset > data_size) {
 						return -1;
 					}
+
+					long int next_header_pos = ftell(f);
+					unsigned long old_offset = offset;
 
 					unsigned int data_byte_size = 0;
 					unsigned int print_string = 0; // set to true if should print a string
@@ -378,8 +416,8 @@ int analyze_jpg(FILE *f) {
 							break;
 						case 0x0002:
 							data_byte_size = 1;
+							print_string = 1;
 							switch (tagid) {
-								print_string = 1;
 								case 0x010d:
 									printf("DocumentName: ");
 									break;
@@ -468,12 +506,15 @@ int analyze_jpg(FILE *f) {
 
 					unsigned long data_num_bytes = (unsigned long) count * data_byte_size;
 
-					if (data_num_bytes < 4) { // data fits in o_o_v field
+					if (data_num_bytes < 5) { // data fits in o_o_v field
 						if (print_string) {
 							printf("%.*s\n", (unsigned int) data_num_bytes, (unsigned char*) &o_o_v);
 						}
 						continue;
 					}
+
+					fseek(f, header_end, SEEK_SET);
+					offset = header_offset;
 
 					while (offset < o_o_v) {  // move stream to beginning of list
 						if (fread(&data, 1, 1, f) != 1) {
@@ -505,32 +546,34 @@ int analyze_jpg(FILE *f) {
 						}
 					}
 
-					unsigned char stop_print = 0;
-					while (offset < end) {
-						if (fread(&data, 1, 1, f) != 1) {
-							return -1;
-						}
-						if (data == 0x00) {
-							stop_print = 1;
-						}
-						if (!stop_print && print_string) {
-							printf("%c", data);
-						}
-						if (offset + 1 < offset) {
-							return -1;
-						}
-						offset++;
-					}
-
 					if (print_string) {
+						while (offset < end) {
+							if (fread(&data, 1, 1, f) != 1) {
+								return -1;
+							}
+							if (data == 0x00) {
+								break;
+							}
+							printf("%c", data);
+							if (offset + 1 < offset) {
+								return -1;
+							}
+							offset++;
+						}
 						printf("\n");
 					}
+
+					fseek(f, next_header_pos, SEEK_SET);
+					offset = old_offset;
 				}
+
+
 
 				// scan to end of data
 				if (offset > data_size) {
 					return -1;
 				}
+
 				while (offset < data_size) {
 					if (fread(&data, 1, 1, f) != 1) {
 						return -1;
@@ -541,6 +584,8 @@ int analyze_jpg(FILE *f) {
 					offset++;
 				}
 
+				return 0;
+
 			} else { // other
 
 				for (; length > 2; length--) {
@@ -548,10 +593,10 @@ int analyze_jpg(FILE *f) {
 						return -1;
 					}
 				}
+			}
 
-				if (fread(marker, 1, 2, f) != 2) { // get next chunk ready
-					return -1;
-				}
+			if (fread(marker, 1, 2, f) != 2) { // get next chunk ready
+				return -1;
 			}
 		}
 	}
