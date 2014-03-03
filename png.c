@@ -61,66 +61,72 @@ int analyze_png(FILE *f) {
 	//moving on to chunks
 	//The following code below should be in a loop, check chunks 1-by-1 until done
 	while (done == false) {
-		unsigned char len[4];
 		unsigned int length = 0;
+		unsigned char len[4];
 		unsigned char chunktype[4];
 		unsigned char checksum[4];
-
-		if (fread(len, 4, 1, f) != 1) { //read the chunk length (big endian int)
-			return -1;
+		if (fread(&length, 4, 1, f) != 1) { //read the chunk length (big endian int)
+				return -1;
 		}
-
 //***** temporarily force big endiannness
-		length += len[0] | len[1] << 8 | len[2] << 16 | len[3] << 24;
+		unsigned char *int_to_char = (unsigned char *) &length;
+		len[3] = int_to_char[0];
+		len[2] = int_to_char[1];
+		len[1] = int_to_char[2];
+		len[0] = int_to_char[3];
 
-		printf("%s", "\nThe chunktype is: ");
+		length = (unsigned int) *len;
+		//printf("\nThe length of this chunk's data is now: %d\n", length);
+
+		//printf("%s", "\nThe chunktype is: ");
 		for (i=0; i<4; i++) { 	//read the chunktype (ASCII)
 			if (fread(&chunktype[i],1,1,f) != 1) {
 				return -1;
 			}
-			printf("%c", chunktype[i]);
+			//printf("%c", chunktype[i]);
 		}
 
-		printf("\nThe length of this chunk's data is: %d\n", length);
 
-//***** switch statement here imo for chunktypes
 		if (checkChunk(chunktype, text_format) == true) { // DO tEXt stuff here
-			printf("%s", "tEXt chunktype\n");
-			
-			//filler method for now, NEED TO CHANGE
-			//tentative strategy: read byte by byte until 0x00
-			//then read the rest based on length
-			
+			//printf("%s", "tEXt chunktype\n");
 			bool stop = false;
 			unsigned int counter = 0;
-			unsigned char key[length];
+			//unsigned char key[length];
+			unsigned char complete[length + 2];
 			
 			while (stop == false) {
-				if (counter == length || fread(&key[counter],1,1,f) != 1) {
+				if (counter == length || fread(&complete[counter],1,1,f) != 1) {
 					return -1;
 				}
-				if (key[counter] == 0x00) {
+				if (complete[(int)counter] == 0x00) {
 					stop = true;
-					printf("%s", ": "); //debug statement representing the colon in Key: Value
-				} else { //this else statement is temporary, for debugging
-					printf("%c", key[counter]); //this is the "key" in Key: Value
+					//printf("%s", ": "); //debug statement representing the colon in Key: Value
+					complete[counter] = ':';
+					counter++;
+					complete[counter] = ' ';
+				} 
+				/* else { //this else statement is temporary, for debugging
+					printf("%c", complete[counter]); //this is the "key" in Key: Value
 				}
+				*/
 				counter++;
 			}
-//***** below could be stored in back of "key" array if i starts at counter and goes to length
-			unsigned int num_left = length - counter;
-			unsigned char value[num_left];
-			for (i=0; i<num_left; i++) {
-				if (fread(&value[i],1,1,f) != 1) {
+		//***** below could be stored in back of "key" array if i starts at counter and goes to length
+			//unsigned int num_left = length - counter;
+			//unsigned char value[num_left];
+			for (i=counter; i<length + 1; i++) {
+				if (fread(&complete[i],1,1,f) != 1) {
 					return -1;
 				}
-				printf("%c", value[i]); //this is the "value" in Key: Value
+				//printf("%c", complete[i]); //this is the "value" in Key: Value
 			}
+			complete[length + 1] = '\0';
+			printf("%s\n", complete);
 			
 
 
 		} else if (checkChunk(chunktype, ztxt_format) == true) { //DO zTXt stuff here
-			printf("%s", "zTXt chunktype\n");
+			//printf("%s", "zTXt chunktype\n");
 			
 			bool stop = false;
 			unsigned int counter = 0;
@@ -145,14 +151,53 @@ int analyze_png(FILE *f) {
 				return -1;
 			}
 
-			unsigned char junk[length];
-			for (i=0; i<length; i++) {
-				fread(&junk,1,1,f);
+			unsigned int num_left = length - counter - 1;
+			unsigned char compressedvalue[num_left];
+			for (i=0; i<num_left; i++) {
+				if (fread(&compressedvalue[i],1,1,f) != 1) {
+					return -1;
+				}
 			}
+
+			uLongf dst_len = num_left;
+			unsigned char* dst;
+			dst = (unsigned char *) malloc(dst_len * sizeof(unsigned char));
+			unsigned char* src;
+			src = compressedvalue;
+			uLong src_len = num_left;
+
+			if (dst == NULL) {
+				return -1;
+			}
+
+			stop = false;
+			while (stop == false) {
+				size_t value = uncompress(dst, &dst_len, src, src_len);
+				if (value == Z_DATA_ERROR || value == Z_MEM_ERROR) {
+					//printf("%s", "wtf");
+					return -1;
+				} else if (value == Z_BUF_ERROR) {
+					//printf("%s", "wtf2");
+					dst_len *= 2;
+					dst = (unsigned char *) malloc(dst_len * sizeof(unsigned char));
+					if (dst == NULL) {
+						return -1;
+					}
+				} else if (value == Z_OK) {
+					//printf("%s", "what");
+					stop = true;
+				}
+			}
+			for (i=0; i<dst_len; i++) {
+				printf("%c", dst[i]);
+			}
+			printf("%s", "\n");
+
+
 
 		} else if (checkChunk(chunktype, time_format) == true) { //DO tIME stuff here
 			//there should only be ONE tIME chunk in a valid PNG file
-			printf("%s", "tIME chunktype\n");
+			//printf("%s", "tIME chunktype\n");
 			
 			/*tentative strategy:
 			1) Make sure "length" is at least 7 bytes (reject malformed)
@@ -161,36 +206,39 @@ int analyze_png(FILE *f) {
 			3) Construct the timestamp string
 			4) E.g. Timestamp: 12/25/2004 2:39:2
 			*/
-			unsigned char yr[2];
+			unsigned char data[8];
 			unsigned int year, month, day, hour, minute, second;
 			
 			if (length != 7) {
 				return -1;
 			}
 			
-			if ((fread(yr,2,1,f) != 1) || (fread(&month,1,1,f) != 1) || (fread(&day,1,1,f) != 1) || (fread(&hour,1,1,f) != 1) || (fread(&minute,1,1,f) != 1) || (fread(&second,1,1,f) != 1)) {
+			if (fread(&data,8,1,f) != 1) {
 				return -1;
 			}
-			year += yr[0] << 16 | yr[1] << 24;
-			month = month >> 24;
-			day = day >> 24;
-			hour = hour >> 24;
-			minute = minute >> 24;
-			second = second >> 24;
-			printf("%u/%u/%u %u:%u:%u", month,day,year,hour,minute,second);
+			year = data[0]*256 + data[1];
+			month = data[2];
+			day = data[3];
+			hour = data[4];
+			minute = data[5];
+			second = data[6];
+			
+			
+
+			printf("Timestamp: %u/%u/%u %u:%u:%u\n", month,day,year,hour,minute,second);
 			
 		} else if (checkChunk(chunktype, end_format) == true) { //ENDING stuff here
-			printf("%s", "IEND chunktype\n");
+			//printf("%s", "IEND chunktype\n");
 			done = true;
 			return 0;
 
 		} else { //this chunk is irrelevant, pass it and get to the next chunk
-			printf("%s", "irrelevant chunktype\n");
+			//printf("%s", "irrelevant chunktype\n");
 
 			//pretty sure there's a way to exploit this
-			unsigned char junk;
+			unsigned char junk[length];
 			for (i=0; i<length; i++) {
-				if (fread(&junk,1,1,f) != 1) {
+				if (fread(junk,1,1,f) != 1) {
 					return -1;
 				}
 			}
@@ -205,7 +253,7 @@ int analyze_png(FILE *f) {
 
 	
 
-    return -1;
+    return 0;
 }
 
 bool checkChunk(unsigned char *test_chunk, const unsigned char *format) {
