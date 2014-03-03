@@ -44,7 +44,8 @@ int analyze_png(FILE *f) {
 		unsigned char chunktype[4];
 		unsigned char checksum[4];
 		if (fread(&length, 4, 1, f) != 1) { //read the chunk length (big endian int)
-			return -1;
+			printf("%s", "WTFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF");
+			continue;
 		}
 		unsigned char *int_to_char = (unsigned char *) &length;
 		len[3] = int_to_char[0];
@@ -57,7 +58,7 @@ int analyze_png(FILE *f) {
 		//printf("%s", "\nThe chunktype is: ");
 		for (i=0; i<4; i++) { 	//read the chunktype (ASCII)
 			if (fread(&chunktype[i],1,1,f) != 1) {
-				return -1;
+				continue;
 			}
 		}
 
@@ -68,7 +69,7 @@ int analyze_png(FILE *f) {
 			unsigned char complete[length + 2]; //+3 from ':', ' ', '\0', and -1 from overwriting '\0'
 			while (stop == false) {
 				if (counter >= length || fread(&complete[counter],1,1,f) != 1) {
-					return -1;
+					continue;
 				}
 				if (complete[(int)counter] == 0x00) {
 					stop = true;
