@@ -65,9 +65,9 @@ int analyze_png(FILE *f) {
 			//printf("%s", "tEXt chunktype\n");
 			bool stop = false;
 			unsigned int counter = 0;
-			unsigned char complete[length + 2];
+			unsigned char complete[length + 2]; //+3 from ':', ' ', '\0', and -1 from overwriting '\0'
 			while (stop == false) {
-				if (counter == length || fread(&complete[counter],1,1,f) != 1) {
+				if (counter >= length || fread(&complete[counter],1,1,f) != 1) {
 					return -1;
 				}
 				if (complete[(int)counter] == 0x00) {
@@ -123,12 +123,12 @@ int analyze_png(FILE *f) {
 				}
 			}
 			//malloc space for uncompressed
-			uLongf dst_len = num_left*2;
+			unsigned long dst_len = num_left*2;
 			unsigned char* dst;
 			dst = (unsigned char *) malloc(dst_len * sizeof(unsigned char));
 			unsigned char* src;
 			src = compressedvalue;
-			uLong src_len = num_left;
+			unsigned long src_len = num_left;
 			if (dst == NULL) {
 				return -1;
 			}
@@ -140,7 +140,7 @@ int analyze_png(FILE *f) {
 					return -1;
 				} else if (value == Z_BUF_ERROR) {
 					dst_len *= 2;
-					dst = (unsigned char *) malloc(dst_len * sizeof(unsigned char));
+					dst = (unsigned char *) realloc(dst, dst_len * sizeof(unsigned char));
 					if (dst == NULL) {
 						return -1;
 					}
@@ -152,6 +152,7 @@ int analyze_png(FILE *f) {
 				printf("%c", dst[i]);
 			}
 			printf("%s", "\n");
+			free(dst);
 		} else if (checkChunk(chunktype, time_format) == true) { //DO tIME stuff here
 			//there should only be ONE tIME chunk in a valid PNG file
 			/*tentative strategy:
